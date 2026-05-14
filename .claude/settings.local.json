@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Rscript -e ' *)",
+      "Bash(Rscript -e \"shiny::runApp\\('app.R', launch.browser=TRUE, port=7891\\)\")",
+      "Bash(Rscript -e \"source\\('app.R'\\)\")",
+      "Bash(Rscript -e \"tryCatch\\(source\\('app.R'\\), error=function\\(e\\) { cat\\('Error:', conditionMessage\\(e\\), '\\\\n'\\); traceback\\(\\) }\\)\")",
+      "Bash(Rscript -e \"parse\\(file='app.R'\\)\")",
+      "Bash(Rscript --encoding=UTF-8 -e \"parse\\(file='app.R', encoding='UTF-8'\\)\")"
+    ]
+  }
+}
