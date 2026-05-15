@@ -83,6 +83,7 @@ ui <- fluidPage(
         display: flex;
         align-items: center;
         gap: 8px;
+        white-space: nowrap;
       }
       .form-group { margin-bottom: 0; }
       .selectize-control { margin-top: 0; }
@@ -148,12 +149,11 @@ ui <- fluidPage(
   ),
 
   # Q1 -----------------------------------------------------------------
-  h3("Which one is the coding strand?", class = "q-title"),
-  p("This is the strand with the codons.", class = "subtitle"),
+  h3("On which strand is the NGG PAM?", class = "q-title"),
   radioButtons("strand", label = NULL,
     choiceNames  = list(
-      "5′–3′ Forward genomic strand",
-      "3′–5′ Reverse genomic strand"
+      "Sense strand (strand with the codons)",
+      "Anti-sense strand (strand opposite)"
     ),
     choiceValues = list("forward", "reverse"),
     selected     = character(0)
@@ -171,6 +171,7 @@ ui <- fluidPage(
   # Footer
   tags$div(id = "footer",
     tags$div("part of prime-editing in zebrafish protocols.io"),
+    tags$div(HTML('<a href="https://github.com/francoiskroll/PAMcoedit" target="_blank">source code</a>')),
     tags$div(HTML(
       'data from Yu et al., 2023. <a href="https://pubmed.ncbi.nlm.nih.gov/37119812/" target="_blank"><em>Cell.</em></a>'
     ))
@@ -190,6 +191,7 @@ server <- function(input, output, session) {
     tagList(
       tags$hr(class = "q-divider"),
       h3("What is the PAM sequence context?", class = "q-title"),
+      p("Are you editing the PAM itself? Put here the sequence after edit.", class = "subtitle"),
       selectizeInput("pam_seq", label = NULL,
         choices  = pam_seqs,
         selected = NULL,
@@ -292,7 +294,7 @@ server <- function(input, output, session) {
           HTML(paste0(
             "You can inactivate the PAM without changing the amino acid ",
             "by modifying it from ", orig_html, " to ", mod_html,
-            ". It is expected to be <strong>", fold_fmt, "&times;</strong>",
+            ".<br>It is expected to be <strong>", fold_fmt, "&times;</strong>",
             " better (measured in HEK293T cells)."
           ))
         )
