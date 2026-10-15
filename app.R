@@ -14,10 +14,27 @@ antisense_data <- read_excel("yu2023_supplS3.xlsx", sheet = "Anti-sense strand",
                              skip = 4, col_names = col_names)
 antisense_data <- antisense_data[!is.na(antisense_data$No), ]
 
-# Format a 6-char PAM sequence as HTML with positions 2-4 in red bold.
+# Reverse complement of a DNA sequence.
+revcomp <- function(seq) {
+  chartr("ACGTN", "TGCAN", paste(rev(strsplit(seq, "")[[1]]), collapse = ""))
+}
+
+# Sequence as displayed: reverse-complemented (coding orientation) for the anti-sense strand.
+display_seq <- function(seq, strand) if (strand == "reverse") revcomp(seq) else seq
+
+# Format a 6-char PAM sequence as HTML with the PAM (positions 2-4) in red bold.
 # frame: 1 => split [123][456], 2 => [1][234][56], 3 => [12][345][6]
+# strand = "reverse": display the reverse complement (coding orientation), so the
+#   PAM becomes CCN at positions 3-5; frames split the same way on the displayed sequence.
 # fixed_width = TRUE adds min-width:9ch so >> aligns in Q3 options (not wanted in inline text)
-pam_html <- function(seq, frame, fixed_width = FALSE) {
+# underline: positions (in the displayed sequence) to underline
+# complement = TRUE: display the complementary strand (read 3'->5'), aligned base-by-base
+pam_html <- function(seq, frame, strand = "forward", fixed_width = FALSE,
+                     underline = integer(0), complement = FALSE) {
+  pam_pos <- 2:4
+  if (strand == "reverse") pam_pos <- 3:5
+  seq <- display_seq(seq, strand)
+  if (complement) seq <- chartr("ACGTN", "TGCAN", seq)
   chars <- strsplit(seq, "")[[1]]
   spaces_after <- switch(as.character(frame),
     "1" = 3L,
@@ -27,8 +44,10 @@ pam_html <- function(seq, frame, fixed_width = FALSE) {
   inner <- ""
   for (i in seq_along(chars)) {
     ch <- chars[i]
-    if (i %in% 2:4) {
-      inner <- paste0(inner, '<span style="color:red;font-weight:bold">', ch, "</span>")
+    style <- c(if (i %in% pam_pos) "color:red;font-weight:bold",
+               if (i %in% underline) "text-decoration:underline")
+    if (length(style) > 0) {
+      inner <- paste0(inner, '<span style="', paste(style, collapse = ";"), '">', ch, "</span>")
     } else {
       inner <- paste0(inner, ch)
     }
@@ -47,6 +66,17 @@ modify_seq <- function(seq, best_pam) {
   paste(chars, collapse = "")
 }
 
+# Both strands of a 6-char sequence, aligned, with 5'/3' ends labelled.
+duplex_html <- function(seq, frame, strand, underline = integer(0)) {
+  end <- function(x) paste0('<span class="strand-end">', x, "</span>")
+  paste0('<div class="duplex">',
+         end("5&prime; "), pam_html(seq, frame, strand, underline = underline), end(" 3&prime;"),
+         "<br>",
+         end("3&prime; "), pam_html(seq, frame, strand, underline = underline, complement = TRUE),
+         end(" 5&prime;"),
+         "</div>")
+}
+
 is_na_val <- function(x) is.na(x) || trimws(as.character(x)) == "n.a."
 
 # ---- UI ---------------------------------------------------------------
@@ -55,7 +85,7 @@ ui <- fluidPage(
   tags$head(
     tags$style(HTML("
       body {
-        max-width: 680px;
+        max-width: 760px;
         margin: 40px auto;
         padding: 0 20px 120px 20px;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -110,6 +140,29 @@ ui <- fluidPage(
         font-size: 1.05em;
         line-height: 1.9;
       }
+      .coedit {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 10px 26px;
+        margin: 10px 0 14px 0;
+      }
+      .coedit-label {
+        font-size: 0.85em;
+        font-style: italic;
+        color: #666;
+      }
+      .coedit-arrow {
+        font-size: 1.4em;
+        color: #999;
+        padding-bottom: 10px;
+      }
+      .duplex {
+        font-family: 'Courier New', Courier, monospace;
+        line-height: 1.45;
+        white-space: nowrap;
+      }
+      .strand-end { color: #aaa; }
       .result-box.not-possible {
         background: #fff5f5;
         border-left-color: #e74c3c;
@@ -170,10 +223,12 @@ ui <- fluidPage(
 
   # Footer
   tags$div(id = "footer",
-    tags$div("part of prime-editing in zebrafish protocols.io"),
+    tags$div(HTML(
+      'part of prime-editing in zebrafish <a href="https://dx.doi.org/10.17504/protocols.io.36wgqxx3xlk5/v1" target="_blank">protocols.io</a>'
+    )),
     tags$div(HTML('<a href="https://github.com/francoiskroll/PAMcoedit" target="_blank">source code</a>')),
     tags$div(HTML(
-      'data from Yu et al., 2023. <a href="https://pubmed.ncbi.nlm.nih.gov/37119812/" target="_blank"><em>Cell.</em></a>'
+      'data from <a href="https://pubmed.ncbi.nlm.nih.gov/37119812/" target="_blank">Yu et al., 2023. <em>Cell.</em></a>'
     ))
   )
 )
@@ -237,7 +292,7 @@ server <- function(input, output, session) {
     aa3 <- row$F3_AA
 
     subtitle <- if (input$strand == "reverse") {
-      p("As Reverse strand is coding, codons will be in reverse-complement of sequence below.",
+      p("Below is the reverse complement sequence of the PAM sequence context above.",
         class = "subtitle")
     } else NULL
 
@@ -253,9 +308,9 @@ server <- function(input, output, session) {
       subtitle,
       radioButtons("frame", label = NULL,
         choiceNames  = list(
-          make_label(pam_html(seq, 1, fixed_width = TRUE), aa1),
-          make_label(pam_html(seq, 2, fixed_width = TRUE), aa2),
-          make_label(pam_html(seq, 3, fixed_width = TRUE), aa3)
+          make_label(pam_html(seq, 1, input$strand, fixed_width = TRUE), aa1),
+          make_label(pam_html(seq, 2, input$strand, fixed_width = TRUE), aa2),
+          make_label(pam_html(seq, 3, input$strand, fixed_width = TRUE), aa3)
         ),
         choiceValues = list("1", "2", "3"),
         selected     = character(0)
@@ -284,17 +339,24 @@ server <- function(input, output, session) {
         )
       )
     } else {
-      orig_html <- pam_html(seq, frame)
-      mod_html  <- pam_html(modify_seq(seq, best), frame)
-      fold_fmt  <- sprintf("%.2f", as.numeric(fold))
+      mod     <- modify_seq(seq, best)
+      changed <- which(strsplit(display_seq(seq, input$strand), "")[[1]] !=
+                       strsplit(display_seq(mod, input$strand), "")[[1]])
+      fold_fmt <- sprintf("%.2f", as.numeric(fold))
 
       tagList(
         tags$hr(class = "q-divider"),
         div(class = "result-box",
           HTML(paste0(
-            "You can inactivate the PAM without changing the amino acid ",
-            "by modifying it from ", orig_html, " to ", mod_html,
-            ".<br>It is expected to be <strong>", fold_fmt, "&times;</strong>",
+            "You can inactivate the PAM without changing the amino acid by modifying&nbsp;it:",
+            '<div class="coedit">',
+              '<div><div class="coedit-label">from</div>',
+                duplex_html(seq, frame, input$strand, changed), "</div>",
+              '<div class="coedit-arrow">&rarr;</div>',
+              '<div><div class="coedit-label">to</div>',
+                duplex_html(mod, frame, input$strand, changed), "</div>",
+            "</div>",
+            "It is expected to be <strong>", fold_fmt, "&times;</strong>",
             " better (measured in HEK293T cells)."
           ))
         )
